@@ -1,8 +1,8 @@
 <script lang="ts">
     import { enhance } from '$app/forms';
 
-    export let data: any;
-    export let form: any;
+    export let data;
+    export let form;
 </script>
 
 <form method="POST" use:enhance>

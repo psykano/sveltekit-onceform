@@ -1,8 +1,9 @@
 <script lang="ts">
     import { enhance } from '$app/forms';
+    import type { PageData, ActionData } from './$types';
 
-    export let data;
-    export let form;
+    export let data: PageData;
+    export let form: ActionData;
 </script>
 
 <form method="POST" use:enhance>

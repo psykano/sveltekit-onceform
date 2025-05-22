@@ -1,11 +1,12 @@
-<script>
-	import { page } from '$app/stores';
-	import logo from './svelte-logo.svg';
+<script lang="ts">
+	import { page } from '$app/state';
+	import logo from '$lib/images/svelte-logo.svg';
+	import github from '$lib/images/github.svg';
 </script>
 
 <header>
 	<div class="corner">
-		<a href="https://kit.svelte.dev">
+		<a href="https://svelte.dev/docs/kit">
 			<img src={logo} alt="SvelteKit" />
 		</a>
 	</div>
@@ -15,9 +16,11 @@
 			<path d="M0,0 L1,2 C1.5,3 1.5,3 2,3 L2,0 Z" />
 		</svg>
 		<ul>
-			<li class:active={$page.url.pathname === '/'}><a sveltekit:prefetch href="/">Home</a></li>
-			<li class:active={$page.url.pathname === '/login'}>
-				<a sveltekit:prefetch href="/login">Login</a>
+			<li aria-current={page.url.pathname === '/' ? 'page' : undefined}>
+				<a href="/">Home</a>
+			</li>
+			<li aria-current={page.url.pathname === '/login' ? 'page' : undefined}>
+				<a href="/login">Login</a>
 			</li>
 		</ul>
 		<svg viewBox="0 0 2 3" aria-hidden="true">
@@ -26,7 +29,9 @@
 	</nav>
 
 	<div class="corner">
-		<!-- TODO put something else here? github link? -->
+		<a href="https://github.com/sveltejs/kit">
+			<img src={github} alt="GitHub" />
+		</a>
 	</div>
 </header>
 
@@ -89,7 +94,7 @@
 		height: 100%;
 	}
 
-	li.active::before {
+	li[aria-current='page']::before {
 		--size: 6px;
 		content: '';
 		width: 0;
@@ -98,15 +103,15 @@
 		top: 0;
 		left: calc(50% - var(--size));
 		border: var(--size) solid transparent;
-		border-top: var(--size) solid var(--accent-color);
+		border-top: var(--size) solid var(--color-theme-1);
 	}
 
 	nav a {
 		display: flex;
 		height: 100%;
 		align-items: center;
-		padding: 0 1em;
-		color: var(--heading-color);
+		padding: 0 0.5rem;
+		color: var(--color-text);
 		font-weight: 700;
 		font-size: 0.8rem;
 		text-transform: uppercase;
@@ -116,6 +121,6 @@
 	}
 
 	a:hover {
-		color: var(--accent-color);
+		color: var(--color-theme-1);
 	}
 </style>

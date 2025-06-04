@@ -12,6 +12,32 @@ import {
     type ServerLoadEvent,
     type RequestEvent
 } from '@sveltejs/kit';
+import type { CookieSerializeOptions } from 'cookie';
+
+// ────────────────────────────────────────────────────────────────────────────
+// Configuration & in-memory state
+// ---------------------------------------------------------------------------
+// - COOKIE: name of the lock token cookie
+// - COOKIE_MAX_AGE_SECONDS: lifespan of that cookie
+// - CookieOpts: cookie-serialize options (must include path)
+// - CookieOp / RunningJob: capture and replay Set-Cookie side-effects
+// - running: in-memory map of { token -> { promise, ops } }
+// ────────────────────────────────────────────────────────────────────────────
+
+const COOKIE = 'form_once';
+const COOKIE_MAX_AGE_SECONDS = 600;
+
+type CookieOpts = CookieSerializeOptions & { path: string };
+type CookieOp = [name: string, value: string, opts: CookieOpts];
+
+interface RunningJob<T> {
+    promise: Promise<T>;
+    ops: CookieOp[];
+}
+
+const running = new Map<string, RunningJob<unknown>>();
+
+type CookieEvent = Pick<ServerLoadEvent, 'cookies' | 'url'> & { cookies: Cookies };
 
 // ────────────────────────────────────────────────────────────────────────────
 // addFormToken(event)
@@ -21,12 +47,6 @@ import {
 // and returns { token } so your page can optionally embed it in a hidden <input>
 // (e.g. <input type="hidden" name="once" value={data.token} />)
 // ────────────────────────────────────────────────────────────────────────────
-
-const COOKIE = 'form_once';
-const COOKIE_MAX_AGE_SECONDS = 600;
-
-type CookieEvent = Pick<ServerLoadEvent, 'cookies' | 'url'> & { cookies: Cookies };
-
 export function addFormToken<T extends Record<string, unknown> = {}>(
     event: CookieEvent,
     data: T = {} as T
@@ -47,28 +67,47 @@ export function addFormToken<T extends Record<string, unknown> = {}>(
 // All duplicate requests with the same token await the first Promise and
 // return the same SvelteKit response (fail / redirect / anything).
 // ────────────────────────────────────────────────────────────────────────────
-
-const running = new Map<string, Promise<unknown>>();
-
 export function onceAction<T>(
     handler: (event: RequestEvent) => Promise<T>
 ): (event: RequestEvent) => Promise<T> {
     return async function wrapped(event: RequestEvent): Promise<T> {
         const token = event.cookies.get(COOKIE);
 
+        // Return a typed ActionFailure if the token is missing
         if (!token) {
-            // Return a typed ActionFailure if the token is missing
             return fail(400, { message: 'Form token missing' }) as unknown as T;
         }
 
         // Just wait for the existing job if duplicate
-        const inFlight = running.get(token) as Promise<T> | undefined;
-        if (inFlight) return inFlight;
+        const existing = running.get(token) as RunningJob<T> | undefined;
+        if (existing) {
+            try {
+                const result = await existing.promise;
+                for (const [name, value, opts] of existing.ops) {
+                    event.cookies.set(name, value, opts);
+                }
+                return result;
+            } catch (err) {
+                for (const [name, value, opts] of existing.ops) {
+                    event.cookies.set(name, value, opts);
+                }
+                throw err;
+            }
+        }
 
-        // Run the handler if first request
-        const job = handler(event).finally(() => running.delete(token));
-        running.set(token, job as unknown as Promise<unknown>);
-        return job;
+        // Run the handler if first request and store any cookies
+        const ops: CookieOp[] = [];
+
+        const originalSet = event.cookies.set.bind(event.cookies);
+        event.cookies.set = ((name, value, options) => {
+            ops.push([name, value, options as CookieOpts]);
+            originalSet(name, value, options);
+        }) as typeof event.cookies.set;
+
+        const promise = handler(event).finally(() => running.delete(token));
+        running.set(token, { promise, ops });
+
+        return promise;
     };
 }
 
